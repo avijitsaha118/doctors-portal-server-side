@@ -3,6 +3,9 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const { MongoClient, ServerApiVersion } = require('mongodb');
+var nodemailer = require('nodemailer');
+var sgTransport = require('nodemailer-sendgrid-transport');
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -26,6 +29,43 @@ function verifyJWT(req, res, next) {
         req.decoded = decoded;
         next();
     });
+}
+
+var emailSenderOptions = {
+    auth: {
+        api_key: process.env.EMAIL_SENDER_KEY
+    }
+}
+
+const emailClient = nodemailer.createTransport(sgTransport(emailSenderOptions));
+
+function sendAppointmentEmail(booking) {
+    const { patient, patientName, treatment, date, slot } = booking;
+
+    var email = {
+        from: process.env.EMAIL_SENDER,
+        to: patient,
+        subject: `Your Appointment for ${treatment} is on ${date} at ${slot} is Confirmed`,
+        text: `Your Appointment for ${treatment} is on ${date} at ${slot} is Confirmed`,
+        html: `
+        <div>
+        <h1>Hello Dear ${patientName}</h1> 
+        <p>Your appointment for ${treatment} is confirmed.</p>
+        <p>Looking forword to seeing you on ${date} at ${slot}.</p>
+        <p>Address: Dhaka, Bangladesh</p>
+        </div>
+        `
+    };
+
+    emailClient.sendMail(email, function (err, info) {
+        if (err) {
+            console.log(err);
+        }
+        else {
+            console.log('Message sent: ', info);
+        }
+    });
+
 }
 
 async function run() {
@@ -145,7 +185,7 @@ async function run() {
                 return res.status(403).send({ message: 'forbidden access' })
             }
 
-        })
+        });
 
         app.post('/booking', async (req, res) => {
             const booking = req.body;
@@ -155,6 +195,8 @@ async function run() {
                 return res.send({ success: false, booking: exists })
             }
             const result = await bookingCollection.insertOne(booking);
+            console.log('sending email');
+            sendAppointmentEmail(booking);
             return res.send({ success: true, result });
         });
 
